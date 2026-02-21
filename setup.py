@@ -32,6 +32,8 @@ setup(
     install_requires=[
         "Pillow>=12.0.0",
         "openai>=2.9.0",
+        "dashscope>=1.24.0",
+        "pyaudio>=0.2.14",
     ],
     extras_require={
         "dev": [

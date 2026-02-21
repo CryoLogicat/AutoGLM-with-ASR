@@ -6,9 +6,9 @@ Usage:
     python main.py [OPTIONS]
 
 Environment Variables:
-    PHONE_AGENT_BASE_URL: Model API base URL (default: http://localhost:8000/v1)
-    PHONE_AGENT_MODEL: Model name (default: autoglm-phone-9b)
-    PHONE_AGENT_API_KEY: API key for model authentication (default: EMPTY)
+    PHONE_AGENT_BASE_URL: Model API base URL (default: https://api-inference.modelscope.cn/v1)
+    PHONE_AGENT_MODEL: Model name (default: Qwen/Qwen3.5-397B-A17B)
+    PHONE_AGENT_API_KEY: API key for model authentication (default: MODELSCOPE_API_KEY or EMPTY)
     PHONE_AGENT_MAX_STEPS: Maximum steps per task (default: 100)
     PHONE_AGENT_DEVICE_ID: ADB device ID for multi-device setups
 """
@@ -32,6 +32,38 @@ from phone_agent.device_factory import DeviceType, get_device_factory, set_devic
 from phone_agent.model import ModelConfig
 from phone_agent.xctest import XCTestConnection
 from phone_agent.xctest import list_devices as list_ios_devices
+
+
+def resolve_task_from_asr(args: argparse.Namespace) -> str | None:
+    """Resolve task text from realtime DashScope ASR if requested."""
+    if not args.realtime_task:
+        return None
+
+    if args.task:
+        raise ValueError(
+            "Please provide either positional task or --realtime-task, not both."
+        )
+
+    from phone_agent.asr import RealtimeASRClient, RealtimeASRConfig
+
+    asr_client = RealtimeASRClient(
+        RealtimeASRConfig(
+            model=args.asr_model,
+            format=args.asr_format,
+            sample_rate=args.asr_sample_rate,
+            api_key=args.asr_api_key,
+            websocket_url=args.asr_websocket_url,
+            block_size=args.asr_block_size,
+            semantic_punctuation_enabled=args.asr_semantic_punctuation,
+        )
+    )
+
+    print("🎤 Realtime ASR started.")
+    task_text = asr_client.transcribe_once()
+    if not task_text:
+        raise ValueError("ASR returned empty text")
+    print(f"📝 ASR Task: {task_text}")
+    return task_text
 
 
 def check_system_requirements(
@@ -405,21 +437,25 @@ Examples:
     parser.add_argument(
         "--base-url",
         type=str,
-        default=os.getenv("PHONE_AGENT_BASE_URL", "http://localhost:8000/v1"),
+        default=os.getenv(
+            "PHONE_AGENT_BASE_URL", "https://api-inference.modelscope.cn/v1"
+        ),
         help="Model API base URL",
     )
 
     parser.add_argument(
         "--model",
         type=str,
-        default=os.getenv("PHONE_AGENT_MODEL", "autoglm-phone-9b"),
+        default=os.getenv("PHONE_AGENT_MODEL", "Qwen/Qwen3.5-397B-A17B"),
         help="Model name",
     )
 
     parser.add_argument(
         "--apikey",
         type=str,
-        default=os.getenv("PHONE_AGENT_API_KEY", "EMPTY"),
+        default=os.getenv("PHONE_AGENT_API_KEY")
+        or os.getenv("MODELSCOPE_API_KEY")
+        or "EMPTY",
         help="API key for model authentication",
     )
 
@@ -512,6 +548,59 @@ Examples:
         choices=["adb", "hdc", "ios"],
         default=os.getenv("PHONE_AGENT_DEVICE_TYPE", "adb"),
         help="Device type: adb for Android, hdc for HarmonyOS, ios for iPhone (default: adb)",
+    )
+
+    parser.add_argument("--realtime-task", action="store_true", help="Use realtime ASR task input")
+
+    parser.add_argument(
+        "--asr-model",
+        type=str,
+        default=os.getenv("PHONE_AGENT_ASR_MODEL", "fun-asr-flash-8k-realtime"),
+        help="DashScope ASR model name",
+    )
+
+    parser.add_argument(
+        "--asr-format",
+        type=str,
+        default=os.getenv("PHONE_AGENT_ASR_FORMAT", "wav"),
+        help="Audio format for ASR (default: wav)",
+    )
+
+    parser.add_argument(
+        "--asr-sample-rate",
+        type=int,
+        default=int(os.getenv("PHONE_AGENT_ASR_SAMPLE_RATE", "16000")),
+        help="Audio sample rate for ASR (default: 16000)",
+    )
+
+    parser.add_argument(
+        "--asr-websocket-url",
+        type=str,
+        default=os.getenv(
+            "PHONE_AGENT_ASR_WEBSOCKET_URL",
+            "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+        ),
+        help="DashScope websocket URL for realtime ASR",
+    )
+
+    parser.add_argument(
+        "--asr-block-size",
+        type=int,
+        default=int(os.getenv("PHONE_AGENT_ASR_BLOCK_SIZE", "3200")),
+        help="Audio frames per buffer for realtime ASR (default: 3200)",
+    )
+
+    parser.add_argument(
+        "--asr-semantic-punctuation",
+        action="store_true",
+        help="Enable semantic punctuation for realtime ASR",
+    )
+
+    parser.add_argument(
+        "--asr-api-key",
+        type=str,
+        default=os.getenv("PHONE_AGENT_ASR_API_KEY") or os.getenv("DASHSCOPE_API_KEY"),
+        help="DashScope API key (defaults to PHONE_AGENT_ASR_API_KEY or DASHSCOPE_API_KEY)",
     )
 
     parser.add_argument(
@@ -684,6 +773,11 @@ def handle_device_commands(args) -> bool:
 def main():
     """Main entry point."""
     args = parse_args()
+    try:
+        task_from_audio = resolve_task_from_asr(args)
+    except Exception as e:
+        print(f"ASR error: {e}")
+        sys.exit(1)
 
     # Set device type globally based on args
     if args.device_type == "adb":
@@ -818,9 +912,10 @@ def main():
     print("=" * 50)
 
     # Run with provided task or enter interactive mode
-    if args.task:
-        print(f"\nTask: {args.task}\n")
-        result = agent.run(args.task)
+    effective_task = task_from_audio or args.task
+    if effective_task:
+        print(f"\nTask: {effective_task}\n")
+        result = agent.run(effective_task)
         print(f"\nResult: {result}")
     else:
         # Interactive mode

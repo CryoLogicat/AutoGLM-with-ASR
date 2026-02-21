@@ -265,7 +265,7 @@ class ActionHandler:
         # Handle HDC devices with HarmonyOS-specific keyEvent command
         if device_factory.device_type == DeviceType.HDC:
             hdc_prefix = ["hdc", "-t", self.device_id] if self.device_id else ["hdc"]
-            
+
             # Map common keycodes to HarmonyOS keyEvent codes
             # KEYCODE_ENTER (66) -> 2054 (HarmonyOS Enter key code)
             if keycode == "KEYCODE_ENTER" or keycode == "66":
@@ -329,6 +329,80 @@ class ActionHandler:
         input(f"{message}\nPress Enter after completing manual operation...")
 
 
+def _extract_action_expr(text: str) -> str:
+    """Extract first complete do(...) or finish(...) expression from messy model output."""
+    text = text.strip()
+
+    # Remove markdown fences
+    text = re.sub(r"^```[a-zA-Z]*\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+
+    # Remove common xml-ish wrappers
+    for tag in ("answer", "final_answer", "response"):
+        text = re.sub(fr"</?{tag}>", "", text, flags=re.IGNORECASE)
+
+    text = text.strip()
+
+    # Find "do(" or "finish(" start
+    m = re.search(r"\b(do|finish)\s*\(", text)
+    if not m:
+        return text
+
+    start = m.start()
+    i = m.end() - 1  # index at '('
+    depth = 0
+    in_str = False
+    quote = ""
+    escaped = False
+
+    while i < len(text):
+        ch = text[i]
+
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == quote:
+                in_str = False
+        else:
+            if ch in ("'", '"'):
+                in_str = True
+                quote = ch
+            elif ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    return text[start : i + 1].strip()
+        i += 1
+
+    # If not closed, return trimmed from start (caller will raise parse error if invalid)
+    return text[start:].strip()
+
+
+def _parse_call_expression(expr: str, expected_name: str) -> dict[str, Any]:
+    """Parse do(...) or finish(...) via AST safely."""
+    tree = ast.parse(expr, mode="eval")
+    if not isinstance(tree.body, ast.Call):
+        raise ValueError("Expected a function call")
+
+    call = tree.body
+    if not isinstance(call.func, ast.Name) or call.func.id != expected_name:
+        raise ValueError(f"Expected {expected_name}(...) call")
+
+    if call.args:
+        raise ValueError("Only keyword arguments are supported")
+
+    action = {"_metadata": expected_name}
+    for keyword in call.keywords:
+        if keyword.arg is None:
+            raise ValueError("**kwargs is not supported")
+        action[keyword.arg] = ast.literal_eval(keyword.value)
+
+    return action
+
+
 def parse_action(response: str) -> dict[str, Any]:
     """
     Parse action from model response.
@@ -344,45 +418,23 @@ def parse_action(response: str) -> dict[str, Any]:
     """
     print(f"Parsing action: {response}")
     try:
-        response = response.strip()
-        if response.startswith('do(action="Type"') or response.startswith(
-            'do(action="Type_Name"'
-        ):
-            text = response.split("text=", 1)[1][1:-2]
-            action = {"_metadata": "do", "action": "Type", "text": text}
+        if not isinstance(response, str) or not response.strip():
+            raise ValueError("Empty response")
+
+        expr = _extract_action_expr(response)
+
+        if expr.startswith("do"):
+            action = _parse_call_expression(expr, "do")
+            action["_metadata"] = "do"
             return action
-        elif response.startswith("do"):
-            # Use AST parsing instead of eval for safety
-            try:
-                # Escape special characters (newlines, tabs, etc.) for valid Python syntax
-                response = response.replace('\n', '\\n')
-                response = response.replace('\r', '\\r')
-                response = response.replace('\t', '\\t')
 
-                tree = ast.parse(response, mode="eval")
-                if not isinstance(tree.body, ast.Call):
-                    raise ValueError("Expected a function call")
+        if expr.startswith("finish"):
+            action = _parse_call_expression(expr, "finish")
+            action["_metadata"] = "finish"
+            return action
 
-                call = tree.body
-                # Extract keyword arguments safely
-                action = {"_metadata": "do"}
-                for keyword in call.keywords:
-                    key = keyword.arg
-                    value = ast.literal_eval(keyword.value)
-                    action[key] = value
+        raise ValueError(f"Failed to parse action: {expr}")
 
-                return action
-            except (SyntaxError, ValueError) as e:
-                raise ValueError(f"Failed to parse do() action: {e}")
-
-        elif response.startswith("finish"):
-            action = {
-                "_metadata": "finish",
-                "message": response.replace("finish(message=", "")[1:-2],
-            }
-        else:
-            raise ValueError(f"Failed to parse action: {response}")
-        return action
     except Exception as e:
         raise ValueError(f"Failed to parse action: {e}")
 
