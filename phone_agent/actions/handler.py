@@ -1,3 +1,6 @@
+# Modified by CryoLogicat.
+# Fork of zai-org/Open-AutoGLM under Apache-2.0.
+# Changes include compatibility updates for custom action/runtime behavior.
 """Action handler for processing AI model outputs."""
 
 import ast

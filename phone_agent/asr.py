@@ -1,3 +1,6 @@
+# Modified by CryoLogicat.
+# Fork of zai-org/Open-AutoGLM under Apache-2.0.
+# Added realtime ASR task input support (DashScope + microphone).
 """Realtime speech recognition client based on DashScope ASR."""
 
 import signal

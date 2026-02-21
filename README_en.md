@@ -21,6 +21,11 @@ Access the documentation and install AutoGLM for me
 https://raw.githubusercontent.com/zai-org/Open-AutoGLM/refs/heads/main/README_en.md
 ```
 
+## Current Model Setup (This Fork)
+
+- Speech recognition model (Alibaba Cloud Bailian): `fun-asr-flash-8k-realtime`
+- Task execution model (ModelScope OpenAI-compatible endpoint): `Qwen/Qwen3.5-397B-A17B`
+
 ## Project Introduction
 
 Phone Agent is a mobile intelligent assistant framework built on AutoGLM. It understands phone screen content in a multimodal manner and helps users complete tasks through automated operations. The system controls devices via ADB (Android Debug Bridge), perceives screens using vision-language models, and generates and executes operation workflows through intelligent planning. Users simply describe their needs in natural language, such as "Open eBay and search for wireless earphones." and Phone Agent will automatically parse the intent, understand the current interface, plan the next action, and complete the entire workflow. The system also includes a sensitive operation confirmation mechanism and supports manual takeover during login or verification code scenarios. Additionally, it provides remote ADB debugging capabilities, allowing device connection via WiFi or network for flexible remote control and development.
@@ -438,9 +443,9 @@ You can directly modify the corresponding config files to enhance model capabili
 
 | Variable                    | Description               | Default Value              |
 |-----------------------------|---------------------------|----------------------------|
-| `PHONE_AGENT_BASE_URL`      | Model API URL             | `http://localhost:8000/v1` |
-| `PHONE_AGENT_MODEL`         | Model name                | `autoglm-phone-9b`         |
-| `PHONE_AGENT_API_KEY`       | API key for authentication| `EMPTY`                    |
+| `PHONE_AGENT_BASE_URL`      | Model API URL             | `https://api-inference.modelscope.cn/v1` |
+| `PHONE_AGENT_MODEL`         | Model name                | `Qwen/Qwen3.5-397B-A17B`   |
+| `PHONE_AGENT_API_KEY`       | API key for authentication| `MODELSCOPE_API_KEY` or `EMPTY` |
 | `PHONE_AGENT_MAX_STEPS`     | Maximum steps per task    | `100`                      |
 | `PHONE_AGENT_DEVICE_ID`     | ADB/HDC device ID         | (auto-detect)              |
 | `PHONE_AGENT_DEVICE_TYPE`   | Device type (`adb` or `hdc`)| `adb`                    |
@@ -452,9 +457,9 @@ You can directly modify the corresponding config files to enhance model capabili
 from phone_agent.model import ModelConfig
 
 config = ModelConfig(
-    base_url="http://localhost:8000/v1",
+    base_url="https://api-inference.modelscope.cn/v1",
     api_key="EMPTY",  # API key (if required)
-    model_name="autoglm-phone-9b-multilingual",  # Model name
+    model_name="Qwen/Qwen3.5-397B-A17B",  # Model name
     max_tokens=3000,  # Maximum output tokens
     temperature=0.1,  # Sampling temperature
     frequency_penalty=0.2,  # Frequency penalty

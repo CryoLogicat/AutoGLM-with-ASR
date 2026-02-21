@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Modified by CryoLogicat.
+# Fork of zai-org/Open-AutoGLM under Apache-2.0.
+# Changes include additional dependencies for ASR integration.
 """Setup script for Phone Agent."""
 
 from setuptools import find_packages, setup

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Modified by CryoLogicat.
+# Fork of zai-org/Open-AutoGLM under Apache-2.0.
+# Changes include realtime ASR task input and ModelScope defaults.
 """
 Phone Agent CLI - AI-powered phone automation.
 

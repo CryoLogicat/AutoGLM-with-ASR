@@ -1,3 +1,6 @@
+# Modified by CryoLogicat.
+# Fork of zai-org/Open-AutoGLM under Apache-2.0.
+# Changes include ModelScope-compatible default model endpoint settings.
 """Model client for AI inference using OpenAI-compatible API."""
 
 import json
